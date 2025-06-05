@@ -1,9 +1,10 @@
-@Service
+  @Service
 public class BilanJdbcBatchService {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Transactional
     public void insertBilanWithAll(Bilan bilan) {
         // Insert BILAN
         jdbcTemplate.update(
@@ -11,30 +12,50 @@ public class BilanJdbcBatchService {
             bilan.getSource(), bilan.getNbEtatFinancier(), bilan.getNbPoste(), bilan.getNbIndicateur()
         );
 
+        List<Object[]> posteBatch = new ArrayList<>();
+        List<Object[]> localBatch = new ArrayList<>();
+        List<Object[]> centralBatch = new ArrayList<>();
+
         for (EtatFinancier ef : bilan.getEtatFinancierList()) {
             Long efId = insertEtatFinancier(ef, bilan.getSource());
 
             for (Poste p : ef.getPosteList()) {
-                jdbcTemplate.update(
-                    "INSERT INTO BEF_POSTE (code_poste, valeur, top_retraitement, commentaire, id_ef) VALUES (?, ?, ?, ?, ?)",
+                posteBatch.add(new Object[]{
                     p.getCodePOSTE(), p.getValeur(), p.getTopRETRAITEMENT(), p.getCommentaire(), efId
-                );
+                });
             }
 
             for (IndicateurLocal il : ef.getIndicateurLocalList()) {
-                jdbcTemplate.update(
-                    "INSERT INTO BEF_INDICATEUR_LOCAL (code_indicateur, valeur, top_retraitement, commentaire, id_ef) VALUES (?, ?, ?, ?, ?)",
+                localBatch.add(new Object[]{
                     il.getCodeIndicateur(), il.getValeur(), il.getTopRetraitement(), il.getCommentaire(), efId
-                );
+                });
             }
 
             for (IndicateurCentral ic : ef.getIndicateurCentralList()) {
-                jdbcTemplate.update(
-                    "INSERT INTO BEF_INDICATEUR_CENTRAL (code_indicateur, valeur, commentaire, id_ef) VALUES (?, ?, ?, ?)",
+                centralBatch.add(new Object[]{
                     ic.getCodeIndicateur(), ic.getValeur(), ic.getCommentaire(), efId
-                );
+                });
             }
         }
+
+        // Batch Insert Children
+        batchInsert("""
+            INSERT INTO BEF_POSTE (
+                code_poste, valeur, top_retraitement, commentaire, id_ef
+            ) VALUES (?, ?, ?, ?, ?)
+        """, posteBatch);
+
+        batchInsert("""
+            INSERT INTO BEF_INDICATEUR_LOCAL (
+                code_indicateur, valeur, top_retraitement, commentaire, id_ef
+            ) VALUES (?, ?, ?, ?, ?)
+        """, localBatch);
+
+        batchInsert("""
+            INSERT INTO BEF_INDICATEUR_CENTRAL (
+                code_indicateur, valeur, commentaire, id_ef
+            ) VALUES (?, ?, ?, ?)
+        """, centralBatch);
     }
 
     private Long insertEtatFinancier(EtatFinancier ef, String source) {
@@ -47,8 +68,9 @@ public class BilanJdbcBatchService {
                 "periodicite_ef, top_confidentiel, top_public, unite, code_banque, code_etb, " +
                 "date_file, version, date_acquisition, application, typologie, source" +
                 ") VALUES (SEQ_ETAT_FINANCIER.NEXTVAL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                new String[] { "id" }
+                new String[]{"id"}
             );
+
             ps.setObject(1, ef.getDateCRE());
             ps.setObject(2, ef.getDureeEX());
             ps.setObject(3, ef.getDateCLO());
@@ -72,5 +94,13 @@ public class BilanJdbcBatchService {
         }, keyHolder);
 
         return keyHolder.getKey().longValue();
+    }
+
+    private void batchInsert(String sql, List<Object[]> batchArgs) {
+        int batchSize = 500;
+        for (int i = 0; i < batchArgs.size(); i += batchSize) {
+            List<Object[]> batch = batchArgs.subList(i, Math.min(i + batchSize, batchArgs.size()));
+            jdbcTemplate.batchUpdate(sql, batch);
+        }
     }
 }
