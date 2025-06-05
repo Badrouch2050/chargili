@@ -1,4 +1,4 @@
-@Service
+ @Service
 public class BilanJdbcBatchService {
 
     @Autowired
@@ -16,38 +16,94 @@ public class BilanJdbcBatchService {
         List<Object[]> localBatch = new ArrayList<>();
         List<Object[]> centralBatch = new ArrayList<>();
 
-        long efId = 1L; // simulate IDs or use sequences
+        long efId = 1L;
+
         for (EtatFinancier ef : bilan.getEtatFinancierList()) {
             efBatch.add(new Object[]{
-                efId, ef.getDateCRE(), ef.getTypeEF(), bilan.getSource() // add other needed fields
+                efId,
+                ef.getDateCRE(),
+                ef.getDureeEX(),
+                ef.getDateCLO(),
+                ef.getTypeEF(),
+                ef.getModeleEF(),
+                ef.getCodeDevise(),
+                ef.getAnneeEF(),
+                ef.getPeriodiciteEF(),
+                ef.getTopConfidentiel(),
+                ef.getTopPublic(),
+                ef.getUnite(),
+                ef.getCodeBanque(),
+                ef.getCodeETB(),
+                ef.getDateFile(),
+                ef.getVersion(),
+                ef.getDateAcquisition(),
+                ef.getApplication(),
+                ef.getTypologie(),
+                bilan.getSource()
             });
 
             for (Poste p : ef.getPosteList()) {
                 posteBatch.add(new Object[]{
-                    p.getCodePOSTE(), p.getValeur(), p.getTopRETRAITEMENT(), p.getCommentaire(), efId
+                    p.getCodePOSTE(),
+                    p.getValeur(),
+                    p.getTopRETRAITEMENT(),
+                    p.getCommentaire(),
+                    efId
                 });
             }
 
             for (IndicateurLocal il : ef.getIndicateurLocalList()) {
                 localBatch.add(new Object[]{
-                    il.getCodeIndicateur(), il.getValeur(), il.getTopRetraitement(), il.getCommentaire(), efId
+                    il.getCodeIndicateur(),
+                    il.getValeur(),
+                    il.getTopRetraitement(),
+                    il.getCommentaire(),
+                    efId
                 });
             }
 
             for (IndicateurCentral ic : ef.getIndicateurCentralList()) {
                 centralBatch.add(new Object[]{
-                    ic.getCodeIndicateur(), ic.getValeur(), ic.getCommentaire(), efId
+                    ic.getCodeIndicateur(),
+                    ic.getValeur(),
+                    ic.getCommentaire(),
+                    efId
                 });
             }
 
             efId++;
         }
 
-        // Batch insert all
-        batchInsert("INSERT INTO BEF_ETAT_FINANCIER (id, date_cre, type_ef, source) VALUES (?, ?, ?, ?)", efBatch);
-        batchInsert("INSERT INTO BEF_POSTE (code_poste, valeur, top_retraitement, commentaire, id_ef) VALUES (?, ?, ?, ?, ?)", posteBatch);
-        batchInsert("INSERT INTO BEF_INDICATEUR_LOCAL (code_indicateur, valeur, top_retraitement, commentaire, id_ef) VALUES (?, ?, ?, ?, ?)", localBatch);
-        batchInsert("INSERT INTO BEF_INDICATEUR_CENTRAL (code_indicateur, valeur, commentaire, id_ef) VALUES (?, ?, ?, ?)", centralBatch);
+        // Insert EtatFinancier
+        batchInsert("""
+            INSERT INTO BEF_ETAT_FINANCIER (
+                id, date_cre, duree_ex, date_clo, type_ef, modele_ef, code_devise,
+                annee_ef, periodicite_ef, top_confidentiel, top_public, unite,
+                code_banque, code_etb, date_file, version, date_acquisition, application,
+                typologie, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, efBatch);
+
+        // Insert POSTE
+        batchInsert("""
+            INSERT INTO BEF_POSTE (
+                code_poste, valeur, top_retraitement, commentaire, id_ef
+            ) VALUES (?, ?, ?, ?, ?)
+        """, posteBatch);
+
+        // Insert IndicateurLocal
+        batchInsert("""
+            INSERT INTO BEF_INDICATEUR_LOCAL (
+                code_indicateur, valeur, top_retraitement, commentaire, id_ef
+            ) VALUES (?, ?, ?, ?, ?)
+        """, localBatch);
+
+        // Insert IndicateurCentral
+        batchInsert("""
+            INSERT INTO BEF_INDICATEUR_CENTRAL (
+                code_indicateur, valeur, commentaire, id_ef
+            ) VALUES (?, ?, ?, ?)
+        """, centralBatch);
     }
 
     private void batchInsert(String sql, List<Object[]> batchArgs) {
